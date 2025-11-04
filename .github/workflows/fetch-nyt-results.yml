@@ -1,0 +1,68 @@
+name: Fetch Multiple NYT JSONs
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  fetch-nyt-jsons:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Check time window (ET)
+        id: check_time
+        run: |
+          # Convert UTC to Eastern Time
+          current_time=$(TZ="America/New_York" date +%s)
+          start_time=$(TZ="America/New_York" date -d "2025-11-04 17:30" +%s)
+          end_time=$(TZ="America/New_York" date -d "2025-11-05 23:59" +%s)
+
+          if [ "$current_time" -lt "$start_time" ] || [ "$current_time" -gt "$end_time" ]; then
+            echo "Outside the valid window — skipping run."
+            echo "run_ok=false" >> $GITHUB_OUTPUT
+          else
+            echo "Within window — proceeding."
+            echo "run_ok=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stop if outside window
+        if: steps.check_time.outputs.run_ok != 'true'
+        run: |
+          echo "Not in time window. Exiting."
+          exit 0
+
+      - name: Set up timestamp
+        id: timestamp
+        run: echo "ts=$(date -u +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
+
+      - name: Fetch NYT JSON files
+        run: |
+          ts=${{ steps.timestamp.outputs.ts }}
+
+          # 1️⃣ Races to watch
+          mkdir -p data/races-to-watch
+          curl -s "https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-races-to-watch.json" \
+            -o "data/races-to-watch/2025-gen-NYT-races-to-watch-${ts}.json"
+
+          # # 2️⃣ Senate results (example)
+          # mkdir -p data/senate
+          # curl -s "https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-senate.json" \
+          #   -o "data/senate/2025-gen-NYT-senate-${ts}.json"
+
+          # # 3️⃣ Governor results (example)
+          # mkdir -p data/governor
+          # curl -s "https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-governor.json" \
+          #   -o "data/governor/2025-gen-NYT-governor-${ts}.json"
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git commit -m "Add NYT election JSONs at ${{ steps.timestamp.outputs.ts }}" || echo "No changes to commit"
+          git push
