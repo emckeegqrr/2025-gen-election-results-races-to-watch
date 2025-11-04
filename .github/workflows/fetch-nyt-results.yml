@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write  # allow git push
 
 jobs:
   fetch-nyt-jsons:
@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # fetch full history so we can pull cleanly
 
       - name: Check time window (ET)
         id: check_time
@@ -47,20 +49,28 @@ jobs:
         run: |
           ts=${{ steps.timestamp.outputs.ts }}
 
-          # 1️⃣ Races to watch
+          # 1️⃣ Races to Watch
           mkdir -p data/races-to-watch
           curl -s "https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-races-to-watch.json" \
             -o "data/races-to-watch/2025-gen-NYT-races-to-watch-${ts}.json"
 
-          # 2️⃣ New York results 
+          # 2️⃣ New York Results
           mkdir -p data/New_York
           curl -s "https://static01.nyt.com/elections-assets/pages/data/feeds/b133cfa2-e6ac-436c-b663-05d89f401b60/search/2025-11-04.json" \
             -o "data/New_York/2025-gen-NYT-New-York-${ts}.json"
 
-      - name: Commit and push if changed
+      - name: Commit and push new files
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Pull latest changes first (use rebase to avoid merge commits)
+          git pull --rebase origin main || true
+
           git add data/
-          git commit -m "Add NYT election JSONs at ${{ steps.timestamp.outputs.ts }}" || echo "No changes to commit"
-          git push
+          git commit -m "Add NYT election JSONs at ${{ steps.timestamp.outputs.ts }}" || echo "No new data files to commit"
+
+          # Push cleanly
+          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
