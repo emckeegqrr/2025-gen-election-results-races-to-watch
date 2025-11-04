@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # allow git push
+  contents: write
 
 jobs:
   fetch-nyt-jsons:
@@ -17,29 +17,24 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # fetch full history so we can pull cleanly
+          fetch-depth: 0
 
       - name: Check time window (ET)
         id: check_time
         run: |
-          # Convert UTC to Eastern Time
           current_time=$(TZ="America/New_York" date +%s)
           start_time=$(TZ="America/New_York" date -d "2025-11-04 17:30" +%s)
           end_time=$(TZ="America/New_York" date -d "2025-11-05 23:59" +%s)
 
           if [ "$current_time" -lt "$start_time" ] || [ "$current_time" -gt "$end_time" ]; then
-            echo "Outside the valid window — skipping run."
             echo "run_ok=false" >> $GITHUB_OUTPUT
           else
-            echo "Within window — proceeding."
             echo "run_ok=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Stop if outside window
         if: steps.check_time.outputs.run_ok != 'true'
-        run: |
-          echo "Not in time window. Exiting."
-          exit 0
+        run: exit 0
 
       - name: Set up timestamp
         id: timestamp
@@ -49,15 +44,23 @@ jobs:
         run: |
           ts=${{ steps.timestamp.outputs.ts }}
 
-          # 1️⃣ Races to Watch
-          mkdir -p data/races-to-watch
-          curl -s "https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-races-to-watch.json" \
-            -o "data/races-to-watch/2025-gen-NYT-races-to-watch-${ts}.json"
+          declare -A urls=(
+            ["races-to-watch"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-races-to-watch.json"
+            ["New_York"]="https://static01.nyt.com/elections-assets/pages/data/feeds/b133cfa2-e6ac-436c-b663-05d89f401b60/search/2025-11-04.json"
+            ["Virginia"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-virginia.json"
+            ["New_Jersey"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-new-jersey.json"
+            ["Colorado"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-colorado.json"
+            ["Texas"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-texas.json"
+            ["California_Prop50"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-california-proposition-50-congressional-redistricting.json"
+            ["Maine"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-maine.json"
+            ["Minnesota"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-minnesota.json"
+            ["Pennsylvania"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-pennsylvania.json"
+          )
 
-          # 2️⃣ New York Results
-          mkdir -p data/New_York
-          curl -s "https://static01.nyt.com/elections-assets/pages/data/feeds/b133cfa2-e6ac-436c-b663-05d89f401b60/search/2025-11-04.json" \
-            -o "data/New_York/2025-gen-NYT-New-York-${ts}.json"
+          for folder in "${!urls[@]}"; do
+            mkdir -p "data/${folder}"
+            curl -s "${urls[$folder]}" -o "data/${folder}/2025-gen-NYT-${folder}-${ts}.json"
+          done
 
       - name: Commit and push new files
         env:
@@ -66,11 +69,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Pull latest changes first (use rebase to avoid merge commits)
           git pull --rebase origin main || true
-
           git add data/
-          git commit -m "Add NYT election JSONs at ${{ steps.timestamp.outputs.ts }}" || echo "No new data files to commit"
-
-          # Push cleanly
+          git commit -m "Add NYT election JSONs at ${{ steps.timestamp.outputs.ts }}" || echo "No new files to commit"
           git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
