@@ -52,15 +52,10 @@ jobs:
           curl -s "https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-races-to-watch.json" \
             -o "data/races-to-watch/2025-gen-NYT-races-to-watch-${ts}.json"
 
-          # 2️⃣ Senate results (example)
-          # mkdir -p data/New_York
-          # curl -s "https://static01.nyt.com/elections-assets/pages/data/feeds/b133cfa2-e6ac-436c-b663-05d89f401b60/search/2025-11-04.json" \
-          #   -o "data/New_York/2025-gen-NYT-New-York-${ts}.json"
-
-          # # 3️⃣ Governor results (example)
-          # mkdir -p data/governor
-          # curl -s "https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-governor.json" \
-          #   -o "data/governor/2025-gen-NYT-governor-${ts}.json"
+          # 2️⃣ New York results 
+          mkdir -p data/New_York
+          curl -s "https://static01.nyt.com/elections-assets/pages/data/feeds/b133cfa2-e6ac-436c-b663-05d89f401b60/search/2025-11-04.json" \
+            -o "data/New_York/2025-gen-NYT-New-York-${ts}.json"
 
       - name: Commit and push if changed
         run: |
