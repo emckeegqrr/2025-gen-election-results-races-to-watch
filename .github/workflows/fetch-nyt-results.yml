@@ -19,23 +19,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check time window (ET)
-        id: check_time
-        run: |
-          current_time=$(TZ="America/New_York" date +%s)
-          start_time=$(TZ="America/New_York" date -d "2025-11-04 17:30" +%s)
-          end_time=$(TZ="America/New_York" date -d "2025-11-05 23:59" +%s)
-
-          if [ "$current_time" -lt "$start_time" ] || [ "$current_time" -gt "$end_time" ]; then
-            echo "run_ok=false" >> $GITHUB_OUTPUT
-          else
-            echo "run_ok=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Stop if outside window
-        if: steps.check_time.outputs.run_ok != 'true'
-        run: exit 0
-
       - name: Set up timestamp
         id: timestamp
         run: echo "ts=$(date -u +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
