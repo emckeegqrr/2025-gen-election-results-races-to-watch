@@ -2,7 +2,6 @@ name: Fetch Multiple NYT JSONs
 
 on:
   schedule:
-    # Run every 5 minutes
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
@@ -45,21 +44,23 @@ jobs:
             ["Pennsylvania"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-pennsylvania.json"
           )
 
-          mkdir -p data
           changed=false
 
           for folder in "${!urls[@]}"; do
             mkdir -p "data/${folder}"
-            file="data/${folder}/latest.json"
-            tmpfile="data/${folder}/tmp-${ts}.json"
-            curl -s "${urls[$folder]}" -o "$tmpfile"
+            new_file="data/${folder}/2025-gen-NYT-${folder}-${ts}.json"
 
-            # Commit only if the file changed
-            if [ ! -f "$file" ] || ! cmp -s "$file" "$tmpfile"; then
-              mv "$tmpfile" "$file"
-              changed=true
+            curl -s "${urls[$folder]}" -o "$new_file"
+
+            # Find the latest file in the folder, if any
+            last_file=$(ls -1t data/${folder}/*.json 2>/dev/null | head -n 2 | tail -n 1)
+
+            # Compare with the last file
+            if [ -n "$last_file" ] && cmp -s "$new_file" "$last_file"; then
+              echo "No changes in $folder"
+              rm "$new_file"  # optional: remove if identical
             else
-              rm "$tmpfile"
+              changed=true
             fi
           done
 
@@ -75,5 +76,5 @@ jobs:
 
           git pull --rebase origin main || true
           git add data/
-          git commit -m "Update NYT election JSONs at ${{ steps.timestamp.outputs.ts }}"
+          git commit -m "Add NYT election JSONs at ${{ steps.timestamp.outputs.ts }}"
           git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
