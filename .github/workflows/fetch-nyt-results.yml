@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: fetch-nyt-jsons
+  cancel-in-progress: true
+
 jobs:
   fetch-nyt-jsons:
     runs-on: ubuntu-latest
@@ -24,6 +28,7 @@ jobs:
         run: echo "ts=$(date -u +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
 
       - name: Fetch NYT JSON files
+        id: fetch
         run: |
           ts=${{ steps.timestamp.outputs.ts }}
 
@@ -40,12 +45,28 @@ jobs:
             ["Pennsylvania"]="https://static01.nyt.com/elections-assets/pages/data/2025-11-04/results-pennsylvania.json"
           )
 
+          mkdir -p data
+          changed=false
+
           for folder in "${!urls[@]}"; do
             mkdir -p "data/${folder}"
-            curl -s "${urls[$folder]}" -o "data/${folder}/2025-gen-NYT-${folder}-${ts}.json"
+            file="data/${folder}/latest.json"
+            tmpfile="data/${folder}/tmp-${ts}.json"
+            curl -s "${urls[$folder]}" -o "$tmpfile"
+
+            # Commit only if the file changed
+            if [ ! -f "$file" ] || ! cmp -s "$file" "$tmpfile"; then
+              mv "$tmpfile" "$file"
+              changed=true
+            else
+              rm "$tmpfile"
+            fi
           done
 
+          echo "files_changed=$changed" >> $GITHUB_OUTPUT
+
       - name: Commit and push new files
+        if: steps.fetch.outputs.files_changed == 'true'
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -54,5 +75,5 @@ jobs:
 
           git pull --rebase origin main || true
           git add data/
-          git commit -m "Add NYT election JSONs at ${{ steps.timestamp.outputs.ts }}" || echo "No new files to commit"
+          git commit -m "Update NYT election JSONs at ${{ steps.timestamp.outputs.ts }}"
           git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
